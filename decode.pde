@@ -282,9 +282,15 @@ signal[] YC_separation(signal[] in) {
 
   Y = fir_filter(
     Y, 
+  /*
     new double[] {
-    -0.1, 0.3, 0, 0.6, 0, 0.3, -0.1
+   -0.1, 0.3, 0, 0.6, 0, 0.3, -0.1
+   } 
+   */
+    new double[] {
+    0.2, 0.3, 0.3, 0.2
     } 
+    //chroma_notch
     );
 
   signal[] out = new signal[in.length];
@@ -298,7 +304,7 @@ signal[] YC_separation(signal[] in) {
 }
 
 double hue = 0;
-double saturation = 1.0;
+double saturation = 1.3; 
 double brightness = 0;
 double contrast = 0;
 
@@ -431,6 +437,16 @@ signal[] decode_ntsc(signal[] in) {
 
   //I = notch_filter(I, dot_clock_frequency, ntsc_color_subcarrier_frequency, 2);//模様低減
   //Q = notch_filter(Q, dot_clock_frequency, ntsc_color_subcarrier_frequency, 2);//模様低減
+  
+  //輝度シャープ
+  double[] Y_sharpen = high_pass_filter(Y, dot_clock_frequency, 4.2 * 1000 * 1000, 1 / Math.sqrt(2));
+  Y_sharpen = notch_filter(Y_sharpen, dot_clock_frequency, ntsc_color_subcarrier_frequency, 1);
+  Y = add(Y, Y_sharpen, 1, -5);
+  
+  //色シャープ
+  I = add(I, high_pass_filter(I, dot_clock_frequency, ntsc_color_subcarrier_frequency / 1.5, 1 / Math.sqrt(2)), 1, -10);
+  Q = add(Q, high_pass_filter(Q, dot_clock_frequency, ntsc_color_subcarrier_frequency / 1.5, 1 / Math.sqrt(2)), 1, -10);
+
   double burst_I = 0;
   double burst_Q = 0;
   double burst_hue = 0;
@@ -480,8 +496,8 @@ signal[] decode_ntsc(signal[] in) {
     Y[i] += brightness;
     Y[i] *= contrast + 1;
 
-    I[i] /= chroma_level / 0.792 * 3;
-    Q[i] /= chroma_level / 0.792 * 3;
+    I[i] /= 1 / saturation * chroma_level / 0.792 * 3;
+    Q[i] /= 1 / saturation * chroma_level / 0.792 * 3;
 
     //out[i] = in[i];//その他の情報は保持
     out[i] = new signal();

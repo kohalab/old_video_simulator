@@ -13,8 +13,8 @@
  奇数フィールドの垂直同期は(1から数えて)9ライン目が伸びない
  偶数フィールドの垂直同期は(1から数えて)9ライン目が伸びてカラーバーストがない
  */
- 
- /*
+
+/*
  入力画像のドットを合わせたければ756x525pxにする
  
  756 = floor(dot_clock_frequency / (ntsc_horizontal_view_end - ntsc_horizontal_view_start))
@@ -52,20 +52,27 @@ boolean raw_writing = false;//遅いよ
 
 void setup() {
   /*
-  int start = 0;
-   int len = 6268;
-   for (int i = start; i < start + len; i += 2) {
+  int start = 590;
+   int len = 11890;
+   String path = "";
+   for (int i = start; i < start + len - 4; i += 4) {
    println("renban " + i + " / " + len);
-   PImage inimg_A = loadImage("/Users/user/Movies/【Ado】踊 SD jpegs/"+nf(i + 1, 3)+".jpg");
-   PImage inimg_B = loadImage("/Users/user/Movies/【Ado】踊 SD jpegs/"+nf(i + 1 + 1, 3)+".jpg");
-   PImage in_A = createImage(756, 525, RGB);
-   in_A.set((756 / 2) - (640 / 2), 42, inimg_A);
+   PImage inimg_A1 = loadImage(path + "+nf(i + 1 + 0, 5)+".jpg");
+   PImage inimg_A2 = loadImage(path + nf(i + 1 + 1, 5)+".jpg");
+   PImage inimg_B1 = loadImage(path + nf(i + 1 + 2, 5)+".jpg");
+   PImage inimg_B2 = loadImage(path + nf(i + 1 + 3, 5)+".jpg");
+   PImage in_A1 = createImage(756, 525, RGB);
+   in_A1.set((756 / 2) - (inimg_A1.width / 2), (525 / 2) - (inimg_A1.height / 2), inimg_A1);
+   PImage in_A2 = createImage(756, 525, RGB);
+   in_A2.set((756 / 2) - (inimg_A2.width / 2), (525 / 2) - (inimg_A2.height / 2), inimg_A2);
+   PImage in_B1 = createImage(756, 525, RGB);
+   in_B1.set((756 / 2) - (inimg_B1.width / 2), (525 / 2) - (inimg_B1.height / 2), inimg_B1);
+   PImage in_B2 = createImage(756, 525, RGB);
+   in_B2.set((756 / 2) - (inimg_B2.width / 2), (525 / 2) - (inimg_B2.height / 2), inimg_B2);
    
-   PImage in_B = createImage(756, 525, RGB);
-   in_B.set((756 / 2) - (640 / 2), 42, inimg_B);
-   PImage out = convert_ntsc_image(new PImage[] {in_A, in_A, in_B, in_B});
-   mysave("out/"+nf(i + 0, 5)+".jpg", out.get(191, 42, 640, 480));
-   mysave("out/"+nf(i + 1, 5)+".jpg", out.get(191, 42 + 525, 640, 480));
+   PImage out = convert_ntsc_image(new PImage[] {in_A1, in_A2, in_B1, in_B2});
+   mysave("out/"+nf(i + 1, 5)+".png", out.get(132, 49, 756, 425));
+   mysave("out/"+nf(i + 2, 5)+".png", out.get(132, 49 + 525, 756, 425));
    }
    println("done");
    */

@@ -102,6 +102,8 @@ public void mysave(String filename, PImage img_in) {
       JPEGImageEncoder encoder = JPEGCodec.createJPEGEncoder(out);
       JPEGEncodeParam p = encoder.getDefaultJPEGEncodeParam(img);
       p.setQuality(0.95, true);
+      p.setVerticalSubsampling(1, 1);
+      p.setVerticalSubsampling(2, 1);
       encoder.setJPEGEncodeParam(p);
       encoder.encode(img);
 

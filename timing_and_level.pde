@@ -5,6 +5,7 @@ double ntsc_chroma_sampling_frequency = 6750000;//無視
 
 double ntsc_bandwidth_limiting = 4.2 * 1000 * 1000;
 //double ntsc_bandwidth_limiting = 5.6 * 1000 * 1000;
+//double ntsc_bandwidth_limiting = 7 * 1000 * 1000;
 
 double ntsc_horizontal_frequency = ntsc_color_subcarrier_frequency / 227.5;
 double ntsc_horizontal_end = (1 / ntsc_horizontal_frequency);
