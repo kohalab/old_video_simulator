@@ -1,8 +1,12 @@
-double[] restore_dc(double[] in) {
+double[] restore_dc(double[] in, double speed) {
+  //最低レベルを0レベルとしてDCを再生
   double[] out = new double[in.length];
+
+  //鋭いパルスを無視するための入力LPF
   double in_lowpass_filter = 0;
-  double in_lowpass_filter_cutoff = dot_clock_frequency / 2000000;
-  double min = 0;
+  double in_lowpass_filter_cutoff = dot_clock_frequency / (3 * 1000 * 1000);
+
+  double min = 0;//最低の値
   for (int i = 0; i < in.length; i++) {
     in_lowpass_filter = ((in[i]) + in_lowpass_filter * (in_lowpass_filter_cutoff - 1)) / in_lowpass_filter_cutoff;
 
@@ -10,7 +14,9 @@ double[] restore_dc(double[] in) {
       min = in_lowpass_filter;
     }
 
-    min /= 1 + (400 / dot_clock_frequency);
+    //最低レベルをゆっくり上げる
+    //ハイパスがキツくなければspeed400くらい ダメなら3000とか
+    min /= 1 + (speed / dot_clock_frequency);
     //min += (1 / dot_clock_frequency);
 
     out[i] = in[i] + ntsc_sync_level - min;
@@ -26,8 +32,8 @@ signal[] sync_separation(signal[] in) {
   for (int i = 0; i < in.length; i++) {
     sync_in[i] = in[i].composite;
   }
-  sync_in = restore_dc(sync_in);
-  double[] lowpass = low_pass_filter(sync_in, dot_clock_frequency, 1100000, 1 / Math.sqrt(2));
+  sync_in = restore_dc(sync_in, 300);
+  double[] lowpass = low_pass_filter(sync_in, dot_clock_frequency, 800 * 1000, 0.5 / Math.sqrt(2));
 
   signal[] out = new signal[in.length];
 
@@ -48,10 +54,10 @@ signal[] sync_separation(signal[] in) {
   double h_counter = 0;
   for (int i = 0; i < in.length; i++) {
     out[i] = new signal();
-    if (lowpass[i] > (ntsc_sync_level / 2) + 0.05) {
+    if (lowpass[i] > (ntsc_sync_level / 2) + 0.08) {
       c_sync = false;
     }
-    if (lowpass[i] <= (ntsc_sync_level / 2) - 0.05) {
+    if (lowpass[i] <= (ntsc_sync_level / 2) - 0.08) {
       c_sync = true;//正理論
     }
 
@@ -107,7 +113,7 @@ signal[] sync_separation(signal[] in) {
     final double us = (double)1 / 1000 / 1000;
     boolean burst = 
       (h_counter >= ((5.3 + 0.5) * us) / ntsc_horizontal_end) && 
-      (h_counter <= ((7.8 - 0.5) * us) / ntsc_horizontal_end);
+      (h_counter <= ((7.8 - 0.9) * us) / ntsc_horizontal_end);
 
     //v_sync oneshot
     boolean temp = v_sync_old == false && v_sync == true;
@@ -135,54 +141,30 @@ signal[] YC_separation(signal[] in) {
   double[] Y = new double[in.length];
   double[] C = new double[in.length];
 
-  /*
-  Y = notch_filter(filter_in, dot_clock_frequency, ntsc_color_subcarrier_frequency, 1);//カラーサブキャリアの軽減
-   //Y = notch_filter(Y, dot_clock_frequency, ntsc_color_subcarrier_frequency, 1);//カラーサブキャリアの軽減
-   //Y = notch_filter(Y, dot_clock_frequency, ntsc_color_subcarrier_frequency, 1);//カラーサブキャリアの軽減
-   
-   Y = low_pass_filter(Y, dot_clock_frequency, ntsc_color_subcarrier_frequency / 2, 1 / Math.sqrt(2));//カラーサブキャリアの軽減
-   */
-  /*
-  double[] chroma_notch = {
-   0.25, 
-   0.25, 
-   0.25, 
-   0.25, 
-   };
-   */
   double[] chroma_notch = {
   /*
-フィルタ長 : N = 25
+フィルタ長 : N = 15
    フィルタの種類 : BEF
-   窓の種類 : Blackman窓
-   正規化低域遮断周波数 : 0.175
-   正規化高域遮断周波数 : 0.325
+   窓の種類 : Kaiser窓
+   正規化低域遮断周波数 : 0.15
+   正規化高域遮断周波数 : 0.35
+   阻止域減衰量 : 48 [dB]
    */
-    -4.327507258967686e-19, 
-    -2.192384870252141e-19, 
-    -1.718064757819137e-03, 
-    2.305329864738187e-18, 
-    6.080680344626156e-03, 
-    -3.071271641813319e-18, 
-    1.114782528827929e-02, 
-    6.663107430367260e-18, 
-    -9.536016780872281e-02, 
-    3.220562943800661e-17, 
-    2.299669408756608e-01, 
+    -2.573598731820087e-18, 
+    -1.123023032498687e-02, 
     0.000000000000000e+00, 
-    7.000000000000000e-01, 
+    -4.810157979725212e-02, 
+    2.902073588951772e-17, 
+    2.588294279174700e-01, 
     0.000000000000000e+00, 
-    2.299669408756608e-01, 
-    3.220562943800661e-17, 
-    -9.536016780872281e-02, 
-    6.663107430367260e-18, 
-    1.114782528827929e-02, 
-    -3.071271641813319e-18, 
-    6.080680344626156e-03, 
-    2.305329864738187e-18, 
-    -1.718064757819137e-03, 
-    -2.192384870252141e-19, 
-    -4.327507258967686e-19, 
+    6.000000000000001e-01, 
+    0.000000000000000e+00, 
+    2.588294279174700e-01, 
+    2.902073588951772e-17, 
+    -4.810157979725212e-02, 
+    0.000000000000000e+00, 
+    -1.123023032498687e-02, 
+    -2.573598731820087e-18, 
   };
   double[] chroma_bandpass = {
   /*
@@ -256,42 +238,100 @@ signal[] YC_separation(signal[] in) {
     1.941268407374687e-05, 
     -6.232528527560829e-20, 
   };
+
+  double[] BPF = null;
+
+  if (use_analog_filter) {
+    BPF = band_pass_filter(filter_in, dot_clock_frequency, ntsc_color_subcarrier_frequency, 0.6);
+    C = BPF;
+    Y = notch_filter(filter_in, dot_clock_frequency, ntsc_color_subcarrier_frequency, 2.5);
+  } else {
+    /*
+    double[] LPF = fir_filter(filter_in, chroma_notch);
+     double[] HPF = new double[LPF.length];
+     for (int i = 0; i < LPF.length; i++) {
+     HPF[i] = filter_in[i] - LPF[i];
+     }
+     double[] delay_1h = fir_filter(
+     HPF, 
+     new double[] {1, 0, 0}, 
+     (int)(dot_clock_frequency / ntsc_horizontal_frequency)
+     );//1H遅延された信号
+     
+     for (int i = 0; i < filter_in.length; i++) {
+     Y[i] = (filter_in[i] + delay_1h[i]);
+     C[i] = (filter_in[i] - delay_1h[i]) / 2;
+     }
+     */
+
+    double[] delay_1h = fir_filter(
+      filter_in, 
+      new double[] {1, 0, 0}, 
+      (int)(dot_clock_frequency / ntsc_horizontal_frequency)
+      );//1H遅延された信号
+
+    double[] future_1h = fir_filter(
+      filter_in, 
+      new double[] {0, 0, 1}, 
+      (int)(dot_clock_frequency / ntsc_horizontal_frequency)
+      );//1H進んだ信号
+
+    //適応型YC分離
+    for (int i = 4; i < filter_in.length - 4; i++) {
+
+      double fade = 0;
+
+      for (int f = -2; f < 2; f++) {
+        fade = Math.abs(filter_in[i - 2 + f] - filter_in[i + 2 + f]) - Math.abs(filter_in[i + f] - delay_1h[i + f]);
+      }
+      fade /= 4;
+      //垂直方向の差が多ければ水平フィルタを、水平方向の差が多ければ垂直フィルタを使う
+      fade *= 4;
+      if (fade < -1)fade = -1;
+      if (fade > +1)fade = +1;
+      fade += 1;
+      fade /= 2;
+
+      //水平フィルタ
+      double hori_Y = (filter_in[i - 2] + (2 * filter_in[i]) + filter_in[i + 2]) / 4;
+      double hori_C = -(filter_in[i - 2] - (2 * filter_in[i]) + filter_in[i + 2]) / 4;
+
+      //垂直フィルタ
+      double vert_Y = (future_1h[i] + (2 * filter_in[i]) + delay_1h[i]) / 4;
+      double vert_C = -(future_1h[i] - (2 * filter_in[i]) + delay_1h[i]) / 4;
+
+      Y[i] = lerp(hori_Y, vert_Y, fade);
+      C[i] = lerp(hori_C, vert_C, fade);
+    }
+
+    //Y = fir_filter(Y, chroma_notch);
+  }
   /*
-  Y = fir_filter(Y, chroma_notch);
+   //1ライン遅延したのと計算して二次元Y/C分離
+   double[] FIR = fir_filter(
+   BPF, 
+   new double[] {-0.5, 0.5}, 
+   (int)(dot_clock_frequency / ntsc_horizontal_frequency)
+   );
    
-   Y = add(Y, 
-   band_pass_filter(delay_filter(Y, (int)(dot_clock_frequency / ntsc_horizontal_frequency)), dot_clock_frequency, ntsc_color_subcarrier_frequency, 1)
-   , 1, 1);
-   
-   
-   C = fir_filter(filter_in, chroma_bandpass);
-   
-   C = add(C, delay_filter(C, (int)(dot_clock_frequency / ntsc_horizontal_frequency)), 0.5, -0.5);
+   Y = add(filter_in, FIR, 1, -1);
+   C = FIR;
    */
 
-  double[] BPF = fir_filter(filter_in, chroma_bandpass);
 
-  double[] FIR = fir_filter(
-    BPF, 
-    new double[] {-0.5, 0.5}, 
-    (int)(dot_clock_frequency / ntsc_horizontal_frequency)
-    );
-
-  Y = add(filter_in, FIR, 1, -1);
-  C = FIR;
-
-  Y = fir_filter(
-    Y, 
-  /*
-    new double[] {
-   -0.1, 0.3, 0, 0.6, 0, 0.3, -0.1
-   } 
-   */
-    new double[] {
-    0.2, 0.3, 0.3, 0.2
-    } 
-    //chroma_notch
-    );
+  if (use_analog_filter) {
+  } else {
+    /*
+    Y = fir_filter(
+     Y, 
+     new double[] {
+     //-0.1, 0.25, 0.35, 0.35, 0.25, -0.1
+     0.2, 0.3, 0.3, 0.2
+     } 
+     //chroma_notch
+     );
+     */
+  }
 
   signal[] out = new signal[in.length];
 
@@ -400,7 +440,12 @@ signal[] decode_ntsc(signal[] in) {
     2.944958038392145e-19, -8.670717849467505e-05, -3.319550967880867e-04, -6.269783635101152e-04, -6.891897353101802e-04, 5.067623382275192e-19, 2.194265176660287e-03, 6.770228567408323e-03, 1.449504765874971e-02, 2.572136877875045e-02, 4.010704565915763e-02, 5.647463951586574e-02, 7.289735515160392e-02, 8.702886530667454e-02, 9.660811335016214e-02, 9.999999999999999e-02, 9.660811335016214e-02, 8.702886530667454e-02, 7.289735515160392e-02, 5.647463951586574e-02, 4.010704565915763e-02, 2.572136877875045e-02, 1.449504765874971e-02, 6.770228567408323e-03, 2.194265176660287e-03, 5.067623382275192e-19, -6.891897353101802e-04, -6.269783635101152e-04, -3.319550967880867e-04, -8.670717849467505e-05, 2.944958038392145e-19, 
   };
 
-  I = fir_filter(I, I_lowpass_coefficient);
+  if (use_analog_filter) {
+    I = low_pass_filter(I, dot_clock_frequency, 0.7 * 1000 * 1000, 1);
+  } else {
+    I = fir_filter(I, I_lowpass_coefficient);
+    //I = fir_filter(I, new double[] {0.25, 0.25, 0.25, 0.25});
+  }
 
   double[] Q_lowpass_coefficient = {
   /*
@@ -433,27 +478,31 @@ signal[] decode_ntsc(signal[] in) {
     2.944958038392145e-19, -8.670717849467505e-05, -3.319550967880867e-04, -6.269783635101152e-04, -6.891897353101802e-04, 5.067623382275192e-19, 2.194265176660287e-03, 6.770228567408323e-03, 1.449504765874971e-02, 2.572136877875045e-02, 4.010704565915763e-02, 5.647463951586574e-02, 7.289735515160392e-02, 8.702886530667454e-02, 9.660811335016214e-02, 9.999999999999999e-02, 9.660811335016214e-02, 8.702886530667454e-02, 7.289735515160392e-02, 5.647463951586574e-02, 4.010704565915763e-02, 2.572136877875045e-02, 1.449504765874971e-02, 6.770228567408323e-03, 2.194265176660287e-03, 5.067623382275192e-19, -6.891897353101802e-04, -6.269783635101152e-04, -3.319550967880867e-04, -8.670717849467505e-05, 2.944958038392145e-19, 
   };
 
-  Q = fir_filter(Q, Q_lowpass_coefficient);
-
+  if (use_analog_filter) {
+    Q = low_pass_filter(Q, dot_clock_frequency, 0.7 * 1000 * 1000, 1);
+  } else {
+    Q = fir_filter(Q, Q_lowpass_coefficient);
+    //Q = fir_filter(Q, new double[] {0.25, 0.25, 0.25, 0.25});
+  }
   //I = notch_filter(I, dot_clock_frequency, ntsc_color_subcarrier_frequency, 2);//模様低減
   //Q = notch_filter(Q, dot_clock_frequency, ntsc_color_subcarrier_frequency, 2);//模様低減
-  
+  /*
   //輝度シャープ
-  double[] Y_sharpen = high_pass_filter(Y, dot_clock_frequency, 4.2 * 1000 * 1000, 1 / Math.sqrt(2));
-  Y_sharpen = notch_filter(Y_sharpen, dot_clock_frequency, ntsc_color_subcarrier_frequency, 1);
-  Y = add(Y, Y_sharpen, 1, -5);
-  
-  //色シャープ
-  I = add(I, high_pass_filter(I, dot_clock_frequency, ntsc_color_subcarrier_frequency / 1.5, 1 / Math.sqrt(2)), 1, -10);
-  Q = add(Q, high_pass_filter(Q, dot_clock_frequency, ntsc_color_subcarrier_frequency / 1.5, 1 / Math.sqrt(2)), 1, -10);
-
+   double[] Y_sharpen = high_pass_filter(Y, dot_clock_frequency, 4.2 * 1000 * 1000, 1 / Math.sqrt(2));
+   Y_sharpen = notch_filter(Y_sharpen, dot_clock_frequency, ntsc_color_subcarrier_frequency, 1);
+   Y = add(Y, Y_sharpen, 1, -5);
+   
+   //色シャープ
+   I = add(I, high_pass_filter(I, dot_clock_frequency, ntsc_color_subcarrier_frequency / 1.5, 1 / Math.sqrt(2)), 1, -10);
+   Q = add(Q, high_pass_filter(Q, dot_clock_frequency, ntsc_color_subcarrier_frequency / 1.5, 1 / Math.sqrt(2)), 1, -10);
+   */
   double burst_I = 0;
   double burst_Q = 0;
   double burst_hue = 0;
   double chroma_level = 1;
 
   double black_level = 0;
-  double black_level_lowpass_cutoff = dot_clock_frequency / (1000 * 1000);
+  double black_level_lowpass_cutoff = (double)(1000 * 1000) / dot_clock_frequency;
 
   double burst_smooth_cutoff = dot_clock_frequency / (1 * 1000 * 1000);
 
@@ -466,11 +515,13 @@ signal[] decode_ntsc(signal[] in) {
       burst_Q = (Q[i] + burst_Q * burst_smooth_cutoff) / (burst_smooth_cutoff + 1);
 
       chroma_level = Math.sqrt((burst_I * burst_I) + (burst_Q * burst_Q));
+
+      //基準黒レベル
+      black_level += (Y[i] - black_level) * black_level_lowpass_cutoff;
+
       if (chroma_level > 0.1) {
         burst_hue = Math.atan2(-burst_I, -burst_Q) + ((double)33 / 360 * TWO_PI);
         //burst_hue = Math.atan2(-burst_I, -burst_Q) + ((double)-90 / 360 * TWO_PI);
-        //基準黒レベル
-        black_level = (Y[i] + (black_level * black_level_lowpass_cutoff)) / (black_level_lowpass_cutoff + 1);
         //burst_hue = (double)i / 10000;
         /*
       if (i % 10 == 0) {
@@ -492,6 +543,12 @@ signal[] decode_ntsc(signal[] in) {
     Q[i] = (Ii * Math.sin(rotation_hue)) + (Qi * Math.cos(rotation_hue));
 
     Y[i] -= black_level;
+    //Y[i] *= -ntsc_sync_level + 1;
+
+    if (i == 100000) {
+      //println(black_level);
+    }
+
 
     Y[i] += brightness;
     Y[i] *= contrast + 1;
@@ -534,6 +591,10 @@ signal[] yiq_to_rgb(signal[] in) {
     out[i].R = RGB[0];
     out[i].G = RGB[1];
     out[i].B = RGB[2];
+
+    out[i].H_sync = in[i].H_sync;
+    out[i].V_sync = in[i].V_sync;
+    out[i].composite_sync = in[i].composite_sync;
   }
   return out;
 }
@@ -542,19 +603,62 @@ PImage rgb_to_image(signal[] in, deinterlace_mode mode) {
   PImage out;
   int width = (int)Math.round(ntsc_horizontal_end * dot_clock_frequency);
   out = createImage(width, in.length / width, ARGB);
-  for (int i = 0; i < in.length; i++) {
-    int x = i % width;
-    int y = i / width;
-
-    int field = (int)Math.floor((double)y / ntsc_vertical_field_number_of_line);
-    int frame = (int)Math.floor((double)y / ntsc_vertical_frame_number_of_line);
-
-    if (mode == deinterlace_mode.DEINTERLACE_WEAVE) {
-      //単純なインターレース解除
-      //奇数、偶数の順番に送られてくる
-      y = (int)Math.floor((y - ((double)field * ntsc_vertical_field_number_of_line)) * 2);
-      y += Math.floor((frame * ntsc_vertical_frame_number_of_line));
+  for (int y = 0; y < out.height; y++) {
+    for (int x = 0; x < out.width; x++) {
+      //出力画像は黒で塗りつぶしておく
+      out.set(x, y, #000000);
     }
+  }
+
+
+  boolean h_sync_prev = false;
+  boolean v_sync_prev = false;
+
+  int x = 0;
+  int y = 0;
+
+  int field = -1;//最初に垂直同期が来るから
+  int frame = 0;
+
+  for (int i = 0; i < in.length; i++) {
+    /*
+    int x = i % width;
+     int y = i / width;
+     
+     int field = (int)Math.floor((double)y / ntsc_vertical_field_number_of_line);
+     int frame = (int)Math.floor((double)y / ntsc_vertical_frame_number_of_line);
+     
+     if (mode == deinterlace_mode.DEINTERLACE_WEAVE) {
+     //単純なインターレース解除
+     //奇数、偶数の順番に送られてくる
+     y = (int)Math.floor((y - ((double)field * ntsc_vertical_field_number_of_line)) * 2);
+     y += Math.floor((frame * ntsc_vertical_frame_number_of_line));
+     }
+     */
+
+    x += 1;
+    if (h_sync_prev == false && in[i].H_sync) {
+      //水平同期の立ち上がりでyに2を足す
+      //println("hsync");
+      y += 2;
+      x = 0;
+    }
+
+    if (v_sync_prev == false && in[i].V_sync) {
+      //垂直同期の立ち上がりでフィールドカウンターを+1
+      field++;
+      if (field > 1) {
+        frame++;
+        field = 0;
+        //2フィールドで1フレーム 奇数偶数の計算はしてないから最悪
+      }
+      x = 0;
+      y = (frame * (int)ntsc_vertical_frame_number_of_line) + field;
+      //println(field, frame);//デバッグ用
+    }
+
+    h_sync_prev = in[i].H_sync;
+    v_sync_prev = in[i].V_sync;
 
     color c = color(0, 255, 0);
 

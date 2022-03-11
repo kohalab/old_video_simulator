@@ -1,3 +1,6 @@
+double lerp(double x, double y, double t) {
+  return x + (y - x) * t;
+}
 
 import java.io.BufferedInputStream;
 import java.io.BufferedOutputStream;
