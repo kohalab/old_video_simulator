@@ -6,7 +6,7 @@ double[] restore_dc(double[] in, double speed) {
   double in_lowpass_filter = 0;
   double in_lowpass_filter_cutoff = dot_clock_frequency / (3 * 1000 * 1000);
 
-  double min = 0;//最低の値
+  double min = 100;//最低の値
   for (int i = 0; i < in.length; i++) {
     in_lowpass_filter = ((in[i]) + in_lowpass_filter * (in_lowpass_filter_cutoff - 1)) / in_lowpass_filter_cutoff;
 
@@ -32,7 +32,7 @@ signal[] sync_separation(signal[] in) {
   for (int i = 0; i < in.length; i++) {
     sync_in[i] = in[i].composite;
   }
-  sync_in = restore_dc(sync_in, 300);
+  sync_in = restore_dc(sync_in, 800);
   double[] lowpass = low_pass_filter(sync_in, dot_clock_frequency, 800 * 1000, 0.5 / Math.sqrt(2));
 
   signal[] out = new signal[in.length];
@@ -282,11 +282,11 @@ signal[] YC_separation(signal[] in) {
       double fade = 0;
 
       for (int f = -2; f < 2; f++) {
-        fade = Math.abs(filter_in[i - 2 + f] - filter_in[i + 2 + f]) - Math.abs(filter_in[i + f] - delay_1h[i + f]);
+        fade += Math.abs(filter_in[i - 2 + f] - filter_in[i + 2 + f]) - Math.abs(filter_in[i + f] - delay_1h[i + f]);
       }
       fade /= 4;
       //垂直方向の差が多ければ水平フィルタを、水平方向の差が多ければ垂直フィルタを使う
-      fade *= 4;
+      fade *= 8;
       if (fade < -1)fade = -1;
       if (fade > +1)fade = +1;
       fade += 1;
