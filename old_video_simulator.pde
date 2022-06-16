@@ -46,6 +46,10 @@ deinterlace_mode deinterlace_mode_setting = deinterlace_mode.DEINTERLACE_WEAVE;
 
 boolean use_analog_filter = false;//デコードに普通のフィルタを使う
 
+boolean encoder_enable_ytrap = false;
+boolean encoder_no_color_band_limit = true;
+boolean encoder_no_chroma_band_limit = false;
+
 boolean test_line = false;
 
 boolean monochrome_composite_input = false;
@@ -54,11 +58,20 @@ boolean monochrome = false;
 boolean reading_composite = false;
 boolean raw_writing = false;//遅いよ
 
+
+double hue = 0;//ラジアン
+double saturation = 1; 
+double brightness = 0;
+double contrast = 0;
+
+double restore_dc_speed = 100;//400 正しい映像なら100
+
 void setup() {
   /*
-  int start = 0;
-   int len = 12149;
-   String path = "";
+  println((int)(1 / (ntsc_horizontal_view_end - ntsc_horizontal_view_start)));
+   int start = 0;
+   int len = 11570;
+   String path = "/Users/user/Movies/NOMELON NOLEMON rem swimming jpg/";
    for (int i = start; i < start + len - 4; i += 4) {
    println("renban " + (i / 2) + " / " + ((start + len - 4) / 2));
    PImage inimg_A1 = loadImage(path + nf(i + 1 + 0, 5)+".jpg");
@@ -69,24 +82,25 @@ void setup() {
    inimg_A2.resize(720 - 16, 480);
    inimg_B1.resize(720 - 16, 480);
    inimg_B2.resize(720 - 16, 480);
+   //println((525 / 2) - (inimg_A1.height / 2));
    PImage in_A1 = createImage(756, 525, RGB);
-   in_A1.set((756 / 2) - (inimg_A1.width / 2), (525 / 2) - (inimg_A1.height / 2), inimg_A1);
+   in_A1.set((756 / 2) - (inimg_A1.width / 2), 40, inimg_A1);
    PImage in_A2 = createImage(756, 525, RGB);
-   in_A2.set((756 / 2) - (inimg_A2.width / 2), (525 / 2) - (inimg_A2.height / 2), inimg_A2);
+   in_A2.set((756 / 2) - (inimg_A2.width / 2), 40, inimg_A2);
    PImage in_B1 = createImage(756, 525, RGB);
-   in_B1.set((756 / 2) - (inimg_B1.width / 2), (525 / 2) - (inimg_B1.height / 2), inimg_B1);
+   in_B1.set((756 / 2) - (inimg_B1.width / 2), 40, inimg_B1);
    PImage in_B2 = createImage(756, 525, RGB);
-   in_B2.set((756 / 2) - (inimg_B2.width / 2), (525 / 2) - (inimg_B2.height / 2), inimg_B2);
+   in_B2.set((756 / 2) - (inimg_B2.width / 2), 40, inimg_B2);
    
    PImage out = convert_ntsc_image(new PImage[] {in_A1, in_A2, in_B1, in_B2});
    //mysave("out/"+nf(i + 1, 5)+"debug.png", out);
    //横の位置は調整が必要
-   mysave("out/"+nf((i / 2) + 1, 5)+".png", out.get(149, 17, 704, 480));
-   mysave("out/"+nf((i / 2) + 2, 5)+".png", out.get(149, 17 + 525, 704, 480));
+   mysave("out/"+nf((i / 2) + 1, 5)+".png", out.get(149, 34, 704, 480));
+   mysave("out/"+nf((i / 2) + 2, 5)+".png", out.get(149, 34 + 525, 704, 480));
    }
    println("done");
    */
-  ///*
+
   double[] out;//出力用バッファ
 
   int start_millis = millis();
@@ -118,21 +132,28 @@ void setup() {
         filter_in[i + ntsc.length] = ntsc[i].composite;
       }
       //ハイパスフィルタ
-      filter_in = high_pass_filter(filter_in, dot_clock_frequency, 1, 1 / Math.sqrt(2));
+      filter_in = high_pass_filter(filter_in, dot_clock_frequency, 10, 1 / Math.sqrt(2));
+      if (false) {
+        //エフェクト
+        //過剰なDCカット
+        filter_in = high_pass_filter(filter_in, dot_clock_frequency, 70, 0.5 / Math.sqrt(2));
 
-      //エフェクト
-      //過剰なDCカット
-      //filter_in = high_pass_filter(filter_in, dot_clock_frequency, 200, 0.5 / Math.sqrt(2));
+        //ローパス
+        filter_in = low_pass_filter(filter_in, dot_clock_frequency, 2 * 1000 * 1000, 0.2 / Math.sqrt(2));
+        //色復元
+        filter_in = add(filter_in, 
+          band_pass_filter(filter_in, dot_clock_frequency, ntsc_color_subcarrier_frequency, 0.5), 
+          1, 8);
 
-      //水平シャープ
-      //filter_in = add(filter_in, 
-      //band_pass_filter(filter_in, dot_clock_frequency, 5 * 1000 * 1000, 0.5), 
-      //1, 4);
+        //水平シャープ
+        filter_in = add(filter_in, 
+          band_pass_filter(filter_in, dot_clock_frequency, 2.5 * 1000 * 1000, 1), 
+          1, 1);
 
-      //filter_in = add(filter_in, 
-      //high_pass_filter(filter_in, dot_clock_frequency, 1 * 1000 * 1000, 0.5 / Math.sqrt(2)), 
-      //1, 0.1);
-
+        filter_in = add(filter_in, 
+          high_pass_filter(filter_in, dot_clock_frequency, 0.5 * 1000 * 1000, 0.5 / Math.sqrt(2)), 
+          1, 0.1);
+      }
       for (int i = 0; i < ntsc.length; i++) {
         ntsc[i].composite = filter_in[i + ntsc.length];
       }
@@ -147,13 +168,13 @@ void setup() {
       for (int i = 0; i < out.length; i++) {
         out[i] = ntsc[i].composite;
       }
+      out = restore_dc(out, restore_dc_speed);
       println("["+String.format("%5d", millis() - start_millis)+"ms]" + " " +"composite write");
       double_float64_write(sketchPath("composite.raw"), out);
     }
   } else {
     println("["+String.format("%5d", millis() - start_millis)+"ms]" + " " +"loading composite");
     double[] in = double_float64_read(sketchPath("composite in.raw"));
-    //in = restore_dc(in);
     ntsc = new signal[in.length];
     for (int i = 0; i < ntsc.length; i++) {
       ntsc[i] = new signal();
@@ -176,6 +197,8 @@ void setup() {
       for (int i = 0; i < out.length; i++) {
         out[i] = ntsc[i].Y;
       }
+      out = restore_dc(out, restore_dc_speed);
+      //out = restore_dc(sync_in, restore_dc_speed);
       println("["+String.format("%5d", millis() - start_millis)+"ms]" + " " +"Y write");
       double_float64_write(sketchPath("Y.raw"), out);
 
@@ -234,24 +257,24 @@ PImage convert_ntsc_image(PImage[] in) {
   filter_in = high_pass_filter(filter_in, dot_clock_frequency, 1, 1 / Math.sqrt(2));
 
   //エフェクト
-
+  /*
   //過激なローパス
-  filter_in = low_pass_filter(filter_in, dot_clock_frequency, 4 * 1000 * 1000, 1 / Math.sqrt(2));
-  filter_in = add(
-    filter_in, low_pass_filter(filter_in, dot_clock_frequency, 1 * 1000 * 1000, 1 / Math.sqrt(2)), 0.6, 0.4);
-
-  //過剰なDCカット
-  filter_in = high_pass_filter(filter_in, dot_clock_frequency, 300, 2 / Math.sqrt(2));
-
-  //水平シャープ
-  filter_in = add(filter_in, 
-    band_pass_filter(filter_in, dot_clock_frequency, 5 * 1000 * 1000, 0.5), 
-    1, 2);
-
-  filter_in = add(filter_in, 
-    high_pass_filter(filter_in, dot_clock_frequency, 1 * 1000 * 1000, 0.5 / Math.sqrt(2)), 
-    1, 0.1);
-
+   filter_in = low_pass_filter(filter_in, dot_clock_frequency, 4 * 1000 * 1000, 1 / Math.sqrt(2));
+   filter_in = add(
+   filter_in, low_pass_filter(filter_in, dot_clock_frequency, 1 * 1000 * 1000, 1 / Math.sqrt(2)), 0.6, 0.4);
+   
+   //過剰なDCカット
+   filter_in = high_pass_filter(filter_in, dot_clock_frequency, 300, 2 / Math.sqrt(2));
+   
+   //水平シャープ
+   filter_in = add(filter_in, 
+   band_pass_filter(filter_in, dot_clock_frequency, 5 * 1000 * 1000, 0.5), 
+   1, 2);
+   
+   filter_in = add(filter_in, 
+   high_pass_filter(filter_in, dot_clock_frequency, 1 * 1000 * 1000, 0.5 / Math.sqrt(2)), 
+   1, 0.1);
+   */
 
   for (int i = 0; i < ntsc.length; i++) {
     ntsc[i].composite = filter_in[i];

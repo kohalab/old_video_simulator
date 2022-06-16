@@ -264,7 +264,9 @@ signal[] encode_rgb_to_yuv(signal[] in) {
     2.500534958598106e-05, 
     7.042265373217540e-06, 
   };
-  filter_in = fir_filter(filter_in, I_lowpass_coefficient);
+  if (!encoder_no_color_band_limit) {
+    filter_in = fir_filter(filter_in, I_lowpass_coefficient);
+  }
 
   //filter_in = low_pass_filter(filter_in, dot_clock_frequency, 1.5 * 1000 * 1000, 1 / Math.sqrt(2));
   for (int i = 0; i < in.length; i++) {
@@ -329,7 +331,9 @@ signal[] encode_rgb_to_yuv(signal[] in) {
     -2.763861049679442e-04, 
     -1.630498521453600e-04, 
   };
-  filter_in = fir_filter(filter_in, Q_lowpass_coefficient);
+  if (!encoder_no_color_band_limit) {
+    filter_in = fir_filter(filter_in, Q_lowpass_coefficient);
+  }
 
   //filter_in = low_pass_filter(filter_in, dot_clock_frequency, 0.5 * 1000 * 1000, 1 / Math.sqrt(2));
   for (int i = 0; i < in.length; i++) {
@@ -363,13 +367,24 @@ signal[] encode_yuv_to_ntsc(signal[] in) {
    }
    */
 
+  double[] filter_in = new double[in.length];
+  for (int i = 0; i < in.length; i++) {
+    filter_in[i] = in[i].Y;
+  }
+  if (encoder_enable_ytrap) {
+    filter_in = notch_filter(filter_in, dot_clock_frequency, ntsc_color_subcarrier_frequency, 0.5);//Y-TRAP
+  }
+  for (int i = 0; i < in.length; i++) {
+    in[i].Y = filter_in[i];
+  }
+
   for (int i = 0; i < in.length; i++) {
     out[i] = new signal();
     out[i].Y += in[i].Y + (in[i].composite_sync ? ntsc_sync_level : 0);
 
     //ntsc_color_burst_levelはピークtoピークなのに/2するとレベルが低く見える
     //IとQのレベルは正しいのか？
-    out[i].C = (in[i].burst ? Math.sin(i * ntsc_color_subcarrier_frequency / dot_clock_frequency * Math.PI * 2) : 0) * ntsc_color_burst_level;
+    out[i].C = (in[i].burst ? Math.sin(i * ntsc_color_subcarrier_frequency / dot_clock_frequency * Math.PI * 2) : 0) * ntsc_color_burst_level / 2;
 
     out[i].C += in[i].I * Math.sin((i * ntsc_color_subcarrier_frequency / dot_clock_frequency * Math.PI * 2) + ((double)57 / 360 * Math.PI * 2));
     out[i].C += in[i].Q * Math.sin((i * ntsc_color_subcarrier_frequency / dot_clock_frequency * Math.PI * 2) + ((double)147 / 360 * Math.PI * 2));
@@ -377,66 +392,6 @@ signal[] encode_yuv_to_ntsc(signal[] in) {
     out[i].C += in[i].I * Math.sin((i * ntsc_color_subcarrier_frequency / dot_clock_frequency * Math.PI * 2) + ((double)180 / 360 * Math.PI * 2));
      out[i].C += in[i].Q * Math.sin((i * ntsc_color_subcarrier_frequency / dot_clock_frequency * Math.PI * 2) + ((double)90 / 360 * Math.PI * 2));
      */
-  }
-
-  double[] filter_in = new double[in.length];
-  for (int i = 0; i < in.length; i++) {
-    filter_in[i] = out[i].Y;
-  }
-  //filter_in = notch_filter(filter_in, dot_clock_frequency, ntsc_color_subcarrier_frequency, 1.5);//Y-TRAP
-
-  filter_in = low_pass_filter(filter_in, dot_clock_frequency, ntsc_bandwidth_limiting, 0.8 / Math.sqrt(2));
-  //filter_in = low_pass_filter(filter_in, dot_clock_frequency, 4.2 * 1000 * 1000 * 1.2, 1 / Math.sqrt(2));
-  //filter_in = notch_filter(filter_in, dot_clock_frequency, ntsc_color_subcarrier_frequency, 1);
-
-  double[] y_trap = {//ボケるから使わないほうがいい
-  /*
-フィルタ長 : N = 31
-   フィルタの種類 : BEF
-   窓の種類 : Hann窓
-   正規化低域遮断周波数 : 0.2
-   正規化高域遮断周波数 : 0.3
-   */
-    0.000000000000000e+00, 
-    -4.725279957023809e-04, 
-    1.424759880206008e-18, 
-    2.977709252466368e-03, 
-    -2.295867618526002e-18, 
-    1.949085916259688e-18, 
-    -4.794657765435172e-18, 
-    -2.094260066377138e-02, 
-    1.532841164091988e-17, 
-    6.604660330585446e-02, 
-    -2.923628874389532e-17, 
-    -1.263242656484571e-01, 
-    3.138144248583225e-17, 
-    1.790101269667080e-01, 
-    0.000000000000000e+00, 
-    7.999999999999999e-01, 
-    0.000000000000000e+00, 
-    1.790101269667080e-01, 
-    3.138144248583225e-17, 
-    -1.263242656484571e-01, 
-    -2.923628874389532e-17, 
-    6.604660330585446e-02, 
-    1.532841164091988e-17, 
-    -2.094260066377138e-02, 
-    -4.794657765435172e-18, 
-    1.949085916259688e-18, 
-    -2.295867618526002e-18, 
-    2.977709252466368e-03, 
-    1.424759880206008e-18, 
-    -4.725279957023809e-04, 
-    0.000000000000000e+00, 
-  };
-  //filter_in = fir_filter(filter_in, y_trap);
-  /*
-  filter_in = notch_filter(filter_in, dot_clock_frequency, ntsc_color_subcarrier_frequency, 0.5);
-   filter_in = notch_filter(filter_in, dot_clock_frequency, ntsc_color_subcarrier_frequency, 0.5);
-   filter_in = notch_filter(filter_in, dot_clock_frequency, ntsc_color_subcarrier_frequency, 0.5);
-   */
-  for (int i = 0; i < in.length; i++) {
-    out[i].Y = filter_in[i];
   }
 
   for (int i = 0; i < in.length; i++) {
@@ -492,12 +447,23 @@ signal[] encode_yuv_to_ntsc(signal[] in) {
     -9.974292543167959e-04, 
     3.413715564813507e-04, 
   };
-  filter_in = fir_filter(filter_in, chroma_bandpass);
+  if (!encoder_no_chroma_band_limit) {
+    filter_in = fir_filter(filter_in, chroma_bandpass);
+  }
   //filter_in = band_pass_filter(filter_in, dot_clock_frequency, ntsc_color_subcarrier_frequency, 0.3);
   //filter_in = low_pass_filter(filter_in, dot_clock_frequency, ntsc_bandwidth_limiting, 1 / Math.sqrt(3));
   for (int i = 0; i < in.length; i++) {
     out[i].C = filter_in[i];
   }
+
+  for (int i = 0; i < in.length; i++) {
+    filter_in[i] = out[i].Y;
+  }
+  filter_in = low_pass_filter(filter_in, dot_clock_frequency, ntsc_bandwidth_limiting, 0.75 / Math.sqrt(2));
+  for (int i = 0; i < in.length; i++) {
+    out[i].Y = filter_in[i];
+  }
+
 
   for (int i = 0; i < in.length; i++) {
     out[i].composite = out[i].Y + out[i].C + in[i].composite;
