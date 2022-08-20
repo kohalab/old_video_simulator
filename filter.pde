@@ -167,3 +167,40 @@ double[] add(double[] inA, double[] inB, double aA, double aB) {
 double[] add(double[] inA, double[] inB) {
   return add(inA, inB, 1, 1);
 }
+
+double rc_filter_hz_to_a(double sampling_rate, double cutoff_frequency) {
+  return (
+    (4 - (2 * Math.cos(2 * Math.PI * (cutoff_frequency / sampling_rate)))) - 
+    Math.sqrt(Math.pow(4 - (2 * Math.cos(2 * Math.PI * (cutoff_frequency / sampling_rate))), 2) - 4)
+    ) / 2;
+}
+
+double[] rc_low_pass_filter(double[] in, double sampling_rate, double cutoff_frequency) {
+  double cutoff = (
+    (4 - (2 * Math.cos(2 * Math.PI * (cutoff_frequency / sampling_rate)))) - 
+    Math.sqrt(Math.pow(4 - (2 * Math.cos(2 * Math.PI * (cutoff_frequency / sampling_rate))), 2) - 4)
+    ) / 2;
+  cutoff = 1 - cutoff;
+  //println(cutoff);
+  double[] out = new double[in.length];
+  double a = in[0];
+  for (int i = 0; i < in.length; i++) {
+    a += (in[i] - a) * cutoff;
+    out[i] = a;
+  }
+  return out;
+}
+double[] rc_high_pass_filter(double[] in, double sampling_rate, double cutoff_frequency) {
+  double cutoff = (
+    (4 - (2 * Math.cos(2 * Math.PI * (cutoff_frequency / sampling_rate)))) - 
+    Math.sqrt(Math.pow(4 - (2 * Math.cos(2 * Math.PI * (cutoff_frequency / sampling_rate))), 2) - 4)
+    ) / 2;
+  cutoff = 1 - cutoff;
+  double[] out = new double[in.length];
+  double a = in[0];
+  for (int i = 0; i < in.length; i++) {
+    a += (in[i] - a) * cutoff;
+    out[i] = in[i] - a;
+  }
+  return out;
+}

@@ -27,27 +27,34 @@
  
  */
 
-enum video_mode {
+enum VideoMode {
   VIDEO_COMPOSITE, 
     VIDEO_SVIDEO, 
     VIDEO_YUV, 
     VIDEO_RGB,
 }
 
+VideoMode video_mode_setting = VideoMode.VIDEO_COMPOSITE;
 
-video_mode video_mode_setting = video_mode.VIDEO_COMPOSITE;
-
-enum deinterlace_mode {
+enum DeinterlaceMode {
   DEINTERLACE_NO, 
     DEINTERLACE_WEAVE,
 }
 
-deinterlace_mode deinterlace_mode_setting = deinterlace_mode.DEINTERLACE_WEAVE;
+DeinterlaceMode deinterlace_mode_setting = DeinterlaceMode.DEINTERLACE_WEAVE;
 
-boolean use_analog_filter = false;//デコードに普通のフィルタを使う
+enum YCSeparationMethods {
+  RC_FILTER, 
+    BPF_NOTCH, 
+    FIR
+}
+
+YCSeparationMethods yc_separation_methods_setting = YCSeparationMethods.FIR;
+
+boolean use_analog_filter = false;//デコードのフィルタに普通のフィルタを使う
 
 boolean encoder_enable_ytrap = false;
-boolean encoder_no_color_band_limit = true;
+boolean encoder_no_color_band_limit = false;
 boolean encoder_no_chroma_band_limit = false;
 
 boolean test_line = false;
@@ -70,10 +77,10 @@ void setup() {
   /*
   println((int)(1 / (ntsc_horizontal_view_end - ntsc_horizontal_view_start)));
    int start = 0;
-   int len = 11570;
-   String path = "/Users/user/Movies/NOMELON NOLEMON rem swimming jpg/";
+   int len = 7414;
+   String path = "/";
    for (int i = start; i < start + len - 4; i += 4) {
-   println("renban " + (i / 2) + " / " + ((start + len - 4) / 2));
+   println("renban " + (i / 2) + " / " + ((start + len - 4) / 2) + " (" + ((i / 2) * 100 / ((start + len - 4) / 2)) + "%)");
    PImage inimg_A1 = loadImage(path + nf(i + 1 + 0, 5)+".jpg");
    PImage inimg_A2 = loadImage(path + nf(i + 1 + 1, 5)+".jpg");
    PImage inimg_B1 = loadImage(path + nf(i + 1 + 2, 5)+".jpg");
@@ -95,12 +102,11 @@ void setup() {
    PImage out = convert_ntsc_image(new PImage[] {in_A1, in_A2, in_B1, in_B2});
    //mysave("out/"+nf(i + 1, 5)+"debug.png", out);
    //横の位置は調整が必要
-   mysave("out/"+nf((i / 2) + 1, 5)+".png", out.get(149, 34, 704, 480));
-   mysave("out/"+nf((i / 2) + 2, 5)+".png", out.get(149, 34 + 525, 704, 480));
+   mysave("out/"+nf((i / 2) + 1, 5)+".png", out.get(149 + 3, 34, 704, 480));
+   mysave("out/"+nf((i / 2) + 2, 5)+".png", out.get(149 + 3, 34 + 525, 704, 480));
    }
    println("done");
    */
-
   double[] out;//出力用バッファ
 
   int start_millis = millis();
@@ -122,7 +128,7 @@ void setup() {
 
   signal[] ntsc = null;
   if (!reading_composite) {
-    if (video_mode_setting == video_mode.VIDEO_COMPOSITE || video_mode_setting == video_mode.VIDEO_SVIDEO) {
+    if (video_mode_setting == VideoMode.VIDEO_COMPOSITE || video_mode_setting == VideoMode.VIDEO_SVIDEO) {
       println("["+String.format("%5d", millis() - start_millis)+"ms]" + " " +"encode_rgb_to_ntsc");
       ntsc = encode_rgb_to_ntsc(video);
 
@@ -137,27 +143,31 @@ void setup() {
         //エフェクト
         //過剰なDCカット
         filter_in = high_pass_filter(filter_in, dot_clock_frequency, 70, 0.5 / Math.sqrt(2));
-
+      }
+      if (false) {
         //ローパス
         filter_in = low_pass_filter(filter_in, dot_clock_frequency, 2 * 1000 * 1000, 0.2 / Math.sqrt(2));
         //色復元
         filter_in = add(filter_in, 
           band_pass_filter(filter_in, dot_clock_frequency, ntsc_color_subcarrier_frequency, 0.5), 
           1, 8);
-
+      }
+      if (false) {
         //水平シャープ
         filter_in = add(filter_in, 
-          band_pass_filter(filter_in, dot_clock_frequency, 2.5 * 1000 * 1000, 1), 
+          band_pass_filter(filter_in, dot_clock_frequency, 2.5 * 1000 * 1000, 2), 
           1, 1);
-
+      }
+      if (false) {
+        //水平シャープ
         filter_in = add(filter_in, 
-          high_pass_filter(filter_in, dot_clock_frequency, 0.5 * 1000 * 1000, 0.5 / Math.sqrt(2)), 
-          1, 0.1);
+          high_pass_filter(filter_in, dot_clock_frequency, 2.5 * 1000 * 1000, 4 / Math.sqrt(2)), 
+          1, 0.15);
       }
       for (int i = 0; i < ntsc.length; i++) {
         ntsc[i].composite = filter_in[i + ntsc.length];
       }
-    } else if (video_mode_setting == video_mode.VIDEO_YUV) {
+    } else if (video_mode_setting == VideoMode.VIDEO_YUV) {
       video = encode_rgb_to_yuv(video);
     }
 
@@ -184,14 +194,14 @@ void setup() {
 
   //デコード
   signal[] YC = null;
-  if (video_mode_setting == video_mode.VIDEO_COMPOSITE) {
+  if (video_mode_setting == VideoMode.VIDEO_COMPOSITE) {
     println("["+String.format("%5d", millis() - start_millis)+"ms]" + " " +"YC_separation");
-    YC = YC_separation(ntsc);//YC分離
+    YC = YC_separation(ntsc, yc_separation_methods_setting);//YC分離
   } else {
     YC = ntsc;
   }
   if (raw_writing) {
-    if (video_mode_setting == video_mode.VIDEO_COMPOSITE || video_mode_setting == video_mode.VIDEO_SVIDEO) {
+    if (video_mode_setting == VideoMode.VIDEO_COMPOSITE || video_mode_setting == VideoMode.VIDEO_SVIDEO) {
       out = new double[ntsc.length];
       println("["+String.format("%5d", millis() - start_millis)+"ms]" + " " +"Y out");
       for (int i = 0; i < out.length; i++) {
@@ -210,31 +220,31 @@ void setup() {
       double_float64_write(sketchPath("C.raw"), out);
     }
   }
-  if (video_mode_setting == video_mode.VIDEO_COMPOSITE) {
+  if (video_mode_setting == VideoMode.VIDEO_COMPOSITE) {
     println("["+String.format("%5d", millis() - start_millis)+"ms]" + " " +"decode");
     signal[] decode = decode_ntsc(YC);
     signal[] rgb = yiq_to_rgb(decode);
     println("["+String.format("%5d", millis() - start_millis)+"ms]" + " " +"rgb_to_image");
     rgb_to_image(rgb, deinterlace_mode_setting).save("dec COMPOSITE.png");
-  } else if (video_mode_setting == video_mode.VIDEO_SVIDEO) {
+  } else if (video_mode_setting == VideoMode.VIDEO_SVIDEO) {
     println("["+String.format("%5d", millis() - start_millis)+"ms]" + " " +"decode");
     signal[] decode = decode_ntsc(YC);//SVIDEOだけどsync_separationのためにcomposite信号が必須
     signal[] rgb = yiq_to_rgb(decode);
     println("["+String.format("%5d", millis() - start_millis)+"ms]" + " " +"rgb_to_image");
     rgb_to_image(rgb, deinterlace_mode_setting).save("dec SVIDEO.png");
-  } else if (video_mode_setting == video_mode.VIDEO_YUV) {
+  } else if (video_mode_setting == VideoMode.VIDEO_YUV) {
     println("["+String.format("%5d", millis() - start_millis)+"ms]" + " " +"decode");
     signal[] yuv = encode_rgb_to_yuv(video);
     signal[] rgb = yiq_to_rgb(yuv);
     println("["+String.format("%5d", millis() - start_millis)+"ms]" + " " +"rgb_to_image");
     rgb_to_image(rgb, deinterlace_mode_setting).save("dec YUV.png");
-  } else if (video_mode_setting == video_mode.VIDEO_RGB) {
+  } else if (video_mode_setting == VideoMode.VIDEO_RGB) {
     println("["+String.format("%5d", millis() - start_millis)+"ms]" + " " +"decode");
     signal[] rgb = video;
     println("["+String.format("%5d", millis() - start_millis)+"ms]" + " " +"rgb_to_image");
     rgb_to_image(rgb, deinterlace_mode_setting).save("dec RGB.png");
   } else {
-    println("video_mode_settingが何かしらおかしい");
+    println("VideoMode_settingが何かしらおかしい");
   }
 
 
@@ -281,7 +291,7 @@ PImage convert_ntsc_image(PImage[] in) {
   }
 
   signal[] YC = null;
-  YC = YC_separation(ntsc);//YC分離
+  YC = YC_separation(ntsc, yc_separation_methods_setting);//YC分離
 
   signal[] decode = decode_ntsc(YC);
   signal[] rgb = yiq_to_rgb(decode);

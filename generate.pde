@@ -384,10 +384,12 @@ signal[] encode_yuv_to_ntsc(signal[] in) {
 
     //ntsc_color_burst_levelはピークtoピークなのに/2するとレベルが低く見える
     //IとQのレベルは正しいのか？
-    out[i].C = (in[i].burst ? Math.sin(i * ntsc_color_subcarrier_frequency / dot_clock_frequency * Math.PI * 2) : 0) * ntsc_color_burst_level / 2;
+    out[i].C = (in[i].burst ? Math.sin((i * ntsc_color_subcarrier_frequency / dot_clock_frequency * Math.PI * 2) + ((double)180 / 360 * Math.PI * 2)) : 0) * ntsc_color_burst_level / 2;
 
-    out[i].C += in[i].I * Math.sin((i * ntsc_color_subcarrier_frequency / dot_clock_frequency * Math.PI * 2) + ((double)57 / 360 * Math.PI * 2));
-    out[i].C += in[i].Q * Math.sin((i * ntsc_color_subcarrier_frequency / dot_clock_frequency * Math.PI * 2) + ((double)147 / 360 * Math.PI * 2));
+    //out[i].C += in[i].I * Math.sin((i * ntsc_color_subcarrier_frequency / dot_clock_frequency * Math.PI * 2) + ((double)57 / 360 * Math.PI * 2));
+    //out[i].C += in[i].Q * Math.sin((i * ntsc_color_subcarrier_frequency / dot_clock_frequency * Math.PI * 2) + ((double)147 / 360 * Math.PI * 2));
+    out[i].C += in[i].I * Math.cos((i * ntsc_color_subcarrier_frequency / dot_clock_frequency * Math.PI * 2));
+    out[i].C += in[i].Q * Math.sin((i * ntsc_color_subcarrier_frequency / dot_clock_frequency * Math.PI * 2));
     /*
     out[i].C += in[i].I * Math.sin((i * ntsc_color_subcarrier_frequency / dot_clock_frequency * Math.PI * 2) + ((double)180 / 360 * Math.PI * 2));
      out[i].C += in[i].Q * Math.sin((i * ntsc_color_subcarrier_frequency / dot_clock_frequency * Math.PI * 2) + ((double)90 / 360 * Math.PI * 2));
