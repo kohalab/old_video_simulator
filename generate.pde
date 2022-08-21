@@ -5,7 +5,7 @@ class signal {
   double Y, I, Q;
   double C;
   double composite;
-  boolean H_sync, V_sync, composite_sync, burst;//正論理
+  boolean H_sync, V_sync, composite_sync, field, burst;//正論理
 }
 
 signal[] generate(PImage[] in, PImage[] composite_in, int field_length) {

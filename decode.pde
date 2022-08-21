@@ -45,9 +45,13 @@ signal[] sync_separation(signal[] in) {
 
   boolean h_sync_old = false;
   double h_sync_timer = 0;
+  int h_sync_counter = 0;
 
   boolean v_sync_latch = false;
+  boolean v_sync_latch_old = false;
   boolean v_sync_old = false;
+
+  boolean v_field = false;//false=odd true=even
 
   double h_counter = 0;
   for (int i = 0; i < in.length; i++) {
@@ -68,7 +72,7 @@ signal[] sync_separation(signal[] in) {
     h_sync = h_sync_longer > 0;
 
     if (c_sync) {
-      v_sync_timer += (1 / ntsc_horizontal_sync_pulse_end) / dot_clock_frequency / 2;
+      v_sync_timer += (1 / ntsc_horizontal_serrated_sync_pulse_end) / dot_clock_frequency * 1.2;
     } else {
       v_sync_timer = 0;
     }
@@ -83,14 +87,33 @@ signal[] sync_separation(signal[] in) {
 
     v_sync = v_sync_longer > 0;
 
-    //HALF-H Killer
+    //h_sync posedge, HALF-H Killer
     if (h_sync_old == false && h_sync == true) {
-      //h_syncの立ち上がりエッジ
+      //h_syncの立ち下がりエッジ
       if (h_sync_timer > 0.6) {
         //早すぎるh_syncでなければ
         h_sync_timer = 0;//タイマーリセット
+      } else {
+        //早すぎるh_sync
       }
+
       v_sync_latch = v_sync;//v_sync latch
+      h_sync_counter++;
+
+      if (v_sync_latch && !v_sync_latch_old) {
+        //println(h_sync_counter);
+        //垂直同期までに水平同期の立ち上がりカウントが
+        if (h_sync_counter <= 271) {
+          //271以下なら奇数フィールド
+          v_field = false;
+        } else {
+          //272より上なら偶数フィールド
+          v_field = true;
+        }
+        //println(h_sync_counter, v_field);
+        h_sync_counter = 0;
+      }
+      v_sync_latch_old = v_sync_latch;
       //println("e");
     } else {
       h_sync_timer += (1 / ntsc_horizontal_end) / dot_clock_frequency;
@@ -122,6 +145,7 @@ signal[] sync_separation(signal[] in) {
     out[i].V_sync = v_sync;
     out[i].composite_sync = c_sync;
     out[i].burst = burst;
+    out[i].field = v_field;
 
     //out[i].Y = c_sync ? 1:0;//debug
     //out[i].Y = lowpass[i];
@@ -299,7 +323,7 @@ signal[] YC_separation(signal[] in, YCSeparationMethods yc_separation_methods) {
       Y[i] = lerp(hori_Y, vert_Y, fade);
       C[i] = lerp(hori_C, vert_C, fade);
     }
-    
+
     Y = fir_filter(Y, new double[] {-0.05, -0.1, 1.3, -0.1, -0.05}); //シャープ
 
     //Y = fir_filter(Y, chroma_notch);
@@ -489,9 +513,6 @@ signal[] decode_ntsc(signal[] in) {
   double burst_hue = 0;
   double chroma_level = 1;
 
-  double black_level = 0;
-  double black_level_lowpass_cutoff = (double)(1000 * 1000) / dot_clock_frequency;
-
   double[] smooth_Y_coefficient = {
   /*
     フィルタ長 : N = 15
@@ -518,10 +539,12 @@ signal[] decode_ntsc(signal[] in) {
     -1.034474699361243e-03, 
     1.805457184828473e-03, 
   };
-  double[] smooth_Y = fir_filter(Q, smooth_Y_coefficient);
+  double[] smooth_Y = fir_filter(Y, smooth_Y_coefficient);
 
-  double black_level_cutoff = rc_filter_hz_to_a(dot_clock_frequency, ntsc_color_subcarrier_frequency / 2);
+  double black_level_cutoff = rc_filter_hz_to_a(dot_clock_frequency, (100 * 1000));
   double burst_smooth_cutoff = rc_filter_hz_to_a(dot_clock_frequency, (1 * 1000 * 1000));
+
+  double black_level = 0;
 
   signal[] out = new signal[in.length];
   for (int i = 0; i < in.length; i++) {
@@ -586,6 +609,7 @@ signal[] decode_ntsc(signal[] in) {
     out[i].H_sync = sync[i].H_sync;
     out[i].V_sync = sync[i].V_sync;
     out[i].composite_sync = sync[i].composite_sync;
+    out[i].field = sync[i].field;
   }
   return out;
 }
@@ -616,6 +640,7 @@ signal[] yiq_to_rgb(signal[] in) {
     out[i].H_sync = in[i].H_sync;
     out[i].V_sync = in[i].V_sync;
     out[i].composite_sync = in[i].composite_sync;
+    out[i].field = in[i].field;
   }
   return out;
 }
@@ -638,7 +663,6 @@ PImage rgb_to_image(signal[] in, DeinterlaceMode mode) {
   int x = 0;
   int y = 0;
 
-  int field = -1;//最初に垂直同期が来るから
   int frame = 0;
 
   for (int i = 0; i < in.length; i++) {
@@ -666,15 +690,14 @@ PImage rgb_to_image(signal[] in, DeinterlaceMode mode) {
     }
 
     if (v_sync_prev == false && in[i].V_sync) {
-      //垂直同期の立ち上がりでフィールドカウンターを+1
-      field++;
-      if (field > 1) {
-        frame++;
-        field = 0;
-        //2フィールドで1フレーム 奇数偶数の計算はしてないから最悪
-      }
       x = 0;
-      y = (frame * (int)ntsc_vertical_frame_number_of_line) + field;
+      y = (frame * (int)ntsc_vertical_frame_number_of_line) + (in[i].field ? 1 : 0);
+      //println(in[i].field);
+      if (in[i].field) {
+        //偶数フィールドで垂直同期になったらフレームを次に
+        frame++;
+        //println(frame);
+      }
       //println(field, frame);//デバッグ用
     }
 

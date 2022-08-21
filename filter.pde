@@ -169,10 +169,10 @@ double[] add(double[] inA, double[] inB) {
 }
 
 double rc_filter_hz_to_a(double sampling_rate, double cutoff_frequency) {
-  return (
+  return 1 - ((
     (4 - (2 * Math.cos(2 * Math.PI * (cutoff_frequency / sampling_rate)))) - 
     Math.sqrt(Math.pow(4 - (2 * Math.cos(2 * Math.PI * (cutoff_frequency / sampling_rate))), 2) - 4)
-    ) / 2;
+    ) / 2);
 }
 
 double[] rc_low_pass_filter(double[] in, double sampling_rate, double cutoff_frequency) {
