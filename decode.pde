@@ -3,7 +3,7 @@ double[] restore_dc(double[] in, double speed) {
   double[] out = new double[in.length];
 
   //鋭いパルスを無視するための入力LPF
-  double in_lowpass_filter_cutoff = (3 * 1000 * 1000);
+  double in_lowpass_filter_cutoff = (400 * 1000);
   double[] in_lpf = rc_low_pass_filter(in, dot_clock_frequency, in_lowpass_filter_cutoff);
 
   double min = 100;//最低の値
@@ -56,10 +56,10 @@ signal[] sync_separation(signal[] in) {
   double h_counter = 0;
   for (int i = 0; i < in.length; i++) {
     out[i] = new signal();
-    if (lowpass[i] > (ntsc_sync_level / 2) + 0.08) {
+    if (lowpass[i] > (ntsc_sync_level / 2) + (ntsc_sync_level / 6)) {
       c_sync = false;
     }
-    if (lowpass[i] <= (ntsc_sync_level / 2) - 0.08) {
+    if (lowpass[i] <= (ntsc_sync_level / 2) - (ntsc_sync_level / 6)) {
       c_sync = true;//正理論
     }
 
@@ -89,7 +89,7 @@ signal[] sync_separation(signal[] in) {
 
     //h_sync posedge, HALF-H Killer
     if (h_sync_old == false && h_sync == true) {
-      //h_syncの立ち下がりエッジ
+      //h_syncの立ち上がりエッジ
       if (h_sync_timer > 0.6) {
         //早すぎるh_syncでなければ
         h_sync_timer = 0;//タイマーリセット
@@ -542,7 +542,7 @@ signal[] decode_ntsc(signal[] in) {
   double[] smooth_Y = fir_filter(Y, smooth_Y_coefficient);
 
   double black_level_cutoff = rc_filter_hz_to_a(dot_clock_frequency, (100 * 1000));
-  double burst_smooth_cutoff = rc_filter_hz_to_a(dot_clock_frequency, (1 * 1000 * 1000));
+  double burst_smooth_cutoff = rc_filter_hz_to_a(dot_clock_frequency, (100 * 1000));
 
   double black_level = 0;
 
@@ -623,11 +623,6 @@ signal[] yiq_to_rgb(signal[] in) {
     double Q = in[i].Q;
 
     double[] RGB = YIQ_to_RGB(new double[] {Y, I, Q});
-    if (gamma) {
-      RGB[0] = gamma(RGB[0], 2.2);
-      RGB[1] = gamma(RGB[1], 2.2);
-      RGB[2] = gamma(RGB[2], 2.2);
-    }
     /*
     RGB[0] = gamma(RGB[0], 1 / 2.2);
      RGB[1] = gamma(RGB[1], 1 / 2.2);
@@ -663,7 +658,9 @@ PImage rgb_to_image(signal[] in, DeinterlaceMode mode) {
   int x = 0;
   int y = 0;
 
-  int frame = 0;
+  int frame = -1;//最初に垂直同期があるから
+  boolean field = false;
+  int field_count = 0;
 
   for (int i = 0; i < in.length; i++) {
     /*
@@ -682,23 +679,28 @@ PImage rgb_to_image(signal[] in, DeinterlaceMode mode) {
      */
 
     x += 1;
-    if (h_sync_prev == false && in[i].H_sync) {
+    if ((h_sync_prev == false && in[i].H_sync) || x > 950) {
       //水平同期の立ち上がりでyに2を足す
       //println("hsync");
-      y += 2;
+      y++;
       x = 0;
     }
 
-    if (v_sync_prev == false && in[i].V_sync) {
+    if ((v_sync_prev == false && in[i].V_sync) || y > 263) {
+      println(y);
       x = 0;
-      y = (frame * (int)ntsc_vertical_frame_number_of_line) + (in[i].field ? 1 : 0);
+      y = 0;
       //println(in[i].field);
-      if (in[i].field) {
-        //偶数フィールドで垂直同期になったらフレームを次に
+      if (!in[i].field || field_count >= 2) {
+        //奇数フィールドで垂直同期になったらフレームを次に
         frame++;
+        field_count = 0;
         //println(frame);
       }
-      //println(field, frame);//デバッグ用
+      field = in[i].field;
+      //println(y);
+      println(field, field_count, frame);//デバッグ用
+      field_count++;
     }
 
     h_sync_prev = in[i].H_sync;
@@ -710,10 +712,16 @@ PImage rgb_to_image(signal[] in, DeinterlaceMode mode) {
     double R = in[i].R;
     double G = in[i].G;
     double B = in[i].B;
+    if (gamma) {
+      R = sRGB_gamma(R);
+      G = sRGB_gamma(G);
+      B = sRGB_gamma(B);
+    }
 
     c = color((float)(R * 255), (float)(G * 255), (float)(B * 255));
-
-    out.set(x, y, c);
+    out.set(x, 
+      (y * 2) + (frame * (int)ntsc_vertical_frame_number_of_line) + (field ? 1 : 0)
+      , c);
   }
   return out;
 }

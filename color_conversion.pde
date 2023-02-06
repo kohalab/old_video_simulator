@@ -68,13 +68,22 @@ double[] YIQ_to_RGB(double[] in) {
   return (new double[] {R, G, B});
 }
 
-double sRGB_degamma(double in) {
-  if (in <= 0.0031308) {
-    return in * 12.92;
+double sRGB_gamma(double in) {
+  if (in <= 0.0031308d) {
+    return in * 12.92d;
   } else {
-    return 1.055 * Math.pow(in, 1/2.4) - 0.055;
+    return 1.055d * Math.pow(in, 1.0d / 2.4d) - 0.055d;
   }
 }
+
+double sRGB_degamma(double in) {
+  if (in <= 0.04045d) {
+    return in / 12.92d;
+  } else {
+    return Math.pow((in + 0.055d) / 1.055d, 2.4d);
+  }
+}
+
 
 double gamma(double in, double gamma) {
   //inの範囲は0 ~ 1
